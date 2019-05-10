@@ -45,13 +45,13 @@ type Viber struct {
 	Sender Sender
 
 	// event methods
-	ConversationStarted func(v *Viber, u User, conversationType, context string, subscribed bool, token uint64, t time.Time) Message
-	Message             func(v *Viber, u User, m Message, token uint64, t time.Time)
-	Subscribed          func(v *Viber, u User, token uint64, t time.Time)
-	Unsubscribed        func(v *Viber, userID string, token uint64, t time.Time)
-	Delivered           func(v *Viber, userID string, token uint64, t time.Time)
-	Seen                func(v *Viber, userID string, token uint64, t time.Time)
-	Failed              func(v *Viber, userID string, token uint64, descr string, t time.Time)
+	ConversationStarted func(v *Viber, u User, conversationType, context string, subscribed bool, token uint64, t time.Time) (*Message, error)
+	Messagr             func(v *Viber, u User, m Message, token uint64, t time.Time) error
+	Subscribed          func(v *Viber, u User, token uint64, t time.Time) error
+	Unsubscribed        func(v *Viber, userID string, token uint64, t time.Time) error
+	Delivered           func(v *Viber, userID string, token uint64, t time.Time) error
+	Seen                func(v *Viber, userID string, token uint64, t time.Time) error
+	Failed              func(v *Viber, userID string, token uint64, descr string, t time.Time) error
 
 	// client for sending messages
 	client *http.Client
@@ -120,14 +120,28 @@ func (v *Viber) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if v.ConversationStarted != nil {
 			var u User
 			if err := json.Unmarshal(e.User, &u); err != nil {
-				Log.Println(err)
+				// TODO: log err
 				return
 			}
-			if msg := v.ConversationStarted(v, u, e.Type, e.Context, e.Subscribed, e.MessageToken, e.Timestamp.Time); msg != nil {
-				msg.SetReceiver("")
-				msg.SetFrom("")
-				b, _ := json.Marshal(msg)
-				w.Write(b)
+			msg, err := v.ConversationStarted(v, u, e.Type, e.Context, e.Subscribed, e.MessageToken, e.Timestamp.Time)
+			m := *msg
+			if err != nil {
+				// TODO: log err
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+			m.SetReceiver("")
+			m.SetFrom("")
+			b, err := json.Marshal(msg)
+			if err != nil {
+				// TODO: log err
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+			_, err = w.Write(b)
+			if err != nil {
+				// TODO: log err
+				return
 			}
 		}
 
